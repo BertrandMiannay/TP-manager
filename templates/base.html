@@ -60,7 +60,9 @@
         <a href="/inscriptions/">Sorties</a>
         {% if user.is_club_staff %}
             <a href="{% url 'adherents' %}">Adhérents</a>
+            <a href="{% url 'suivi-sessions' %}">Suivi des élèves</a>
         {% endif %}
+        <a href="{% url 'suivi-mine' %}">Mon suivi</a>
         <span class="spacer"></span>
         <a href="{% url 'userManagement:change_password' %}">{{ user.username }}</a>
         <a href="/accounts/logout/">Déconnexion</a>

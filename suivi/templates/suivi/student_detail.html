@@ -1,0 +1,126 @@
+{% extends "suivi/base.html" %}
+
+{% block title %}Suivi — {{ member.first_name }} {{ member.last_name }}{% endblock %}
+
+{% block suivi_content %}
+{% with staff_view=True %}
+<a href="{% url 'suivi-students' %}" class="btn btn-secondary" style="margin-bottom:1.5rem;">← Élèves</a>
+
+<div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
+    <div>
+        <h1 style="margin-bottom:0.25rem;">{{ member.first_name }} {{ member.last_name }}</h1>
+        <p class="muted" style="margin-bottom:1.5rem;">
+            {{ member.email }}
+            {% for f in formations %} <span class="badge badge-cursus">{{ f.name }}</span>{% endfor %}
+        </p>
+    </div>
+    {% if is_current_member %}
+    <a href="{% url 'adherent-detail' member.pk %}?tab=formation" class="btn btn-secondary">Évaluer les compétences</a>
+    {% endif %}
+</div>
+
+<div class="suivi-tabs" id="student-tabs" style="margin-bottom:1.5rem;">
+    <a href="#presences" data-tab="presences">Présences</a>
+    <a href="#competences" data-tab="competences">Compétences</a>
+    <a href="#exercices" data-tab="exercices">Exercices ({{ exercises|length }})</a>
+    <a href="#notes" data-tab="notes">Notes ({{ notes|length }})</a>
+</div>
+
+<section id="tab-presences" class="student-tab">
+    {% include "suivi/_attendance_history.html" %}
+</section>
+
+<section id="tab-competences" class="student-tab">
+    {% include "suivi/_skills_progress.html" %}
+</section>
+
+<section id="tab-exercices" class="student-tab">
+    <details class="card" {% if open_form == 'exercise' %}open{% endif %}>
+        <summary style="cursor:pointer; font-weight:600; color:#1a1a2e;">+ Ajouter un exercice</summary>
+        <form method="post" style="margin-top:1rem;">
+            {% csrf_token %}
+            <input type="hidden" name="_action" value="add_exercise">
+            {{ exercise_form.non_field_errors }}
+            <div class="grid-2">
+                {% for field in exercise_form %}
+                <div class="form-group" {% if field.name == 'comment' %}style="grid-column:1/-1;"{% endif %}>
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}{{ field.errors }}
+                </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Ajouter</button>
+        </form>
+    </details>
+    {% include "suivi/_exercise_list.html" %}
+</section>
+
+<section id="tab-notes" class="student-tab">
+    <details class="card" {% if open_form == 'note' %}open{% endif %}>
+        <summary style="cursor:pointer; font-weight:600; color:#1a1a2e;">+ Ajouter une note</summary>
+        <form method="post" style="margin-top:1rem;">
+            {% csrf_token %}
+            <input type="hidden" name="_action" value="add_note">
+            {{ note_form.non_field_errors }}
+            <div class="grid-2">
+                <div class="form-group"><label for="{{ note_form.date.id_for_label }}">{{ note_form.date.label }}</label>{{ note_form.date }}{{ note_form.date.errors }}</div>
+                <div class="form-group"><label for="{{ note_form.session.id_for_label }}">{{ note_form.session.label }}</label>{{ note_form.session }}{{ note_form.session.errors }}</div>
+            </div>
+            <div class="form-group"><label for="{{ note_form.content.id_for_label }}">{{ note_form.content.label }}</label>{{ note_form.content }}{{ note_form.content.errors }}</div>
+            <div class="form-group"><label for="{{ note_form.visibility.id_for_label }}">{{ note_form.visibility.label }}</label>{{ note_form.visibility }}{{ note_form.visibility.errors }}</div>
+            <button type="submit" class="btn btn-primary">Ajouter</button>
+        </form>
+    </details>
+    {% for note in notes %}
+    <div class="card" style="padding:0.75rem 1rem; margin-bottom:0.75rem;">
+        <div style="display:flex; justify-content:space-between; gap:0.5rem; flex-wrap:wrap; font-size:0.85rem;">
+            <span>
+                <strong>{{ note.date|date:"d/m/Y" }}</strong>
+                {% if note.session %}<a href="{% url 'suivi-session-detail' note.session.pk %}" class="muted">{{ note.session.title|default:"séance" }}</a>{% endif %}
+                <span class="badge badge-{{ note.visibility }}">{{ note.get_visibility_display }}</span>
+                {% if note.author %}<span class="muted">par {{ note.author.get_full_name|default:note.author.username }}</span>{% endif %}
+            </span>
+            <span style="display:flex; gap:0.75rem;">
+                <form method="post" class="inline-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="_action" value="toggle_note">
+                    <input type="hidden" name="note_pk" value="{{ note.pk }}">
+                    <button type="submit" class="link-btn" style="color:#1a1a2e;">{% if note.visibility == 'staff' %}Rendre visible par l'élève{% else %}Réserver à l'équipe{% endif %}</button>
+                </form>
+                <form method="post" class="inline-form" onsubmit="return confirm('Supprimer cette note ?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="_action" value="delete_note">
+                    <input type="hidden" name="note_pk" value="{{ note.pk }}">
+                    <button type="submit" class="link-btn">Supprimer</button>
+                </form>
+            </span>
+        </div>
+        <p style="white-space:pre-line; margin-top:0.4rem;">{{ note.content }}</p>
+    </div>
+    {% empty %}
+    <p class="muted">Aucune note.</p>
+    {% endfor %}
+</section>
+
+<script>
+(function () {
+    const tabs = ['presences', 'competences', 'exercices', 'notes'];
+    function show(name) {
+        if (!tabs.includes(name)) name = 'presences';
+        tabs.forEach(function (t) {
+            document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+            document.querySelector('#student-tabs a[data-tab="' + t + '"]').classList.toggle('active', t === name);
+        });
+    }
+    document.querySelectorAll('#student-tabs a').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            history.replaceState(null, '', '#' + this.dataset.tab);
+            show(this.dataset.tab);
+        });
+    });
+    show(window.location.hash.slice(1));
+})();
+</script>
+{% endwith %}
+{% endblock %}

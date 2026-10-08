@@ -10,5 +10,6 @@ urlpatterns = [
     path('inscriptions/', include('helloAssoImporter.urls')),
     path('saison/', include('helloAssoImporter.membres_urls')),
     path('adherents/', include('helloAssoImporter.adherents_urls')),
+    path('suivi/', include('suivi.urls')),
     path('users/', include('userManagement.urls')),
 ]

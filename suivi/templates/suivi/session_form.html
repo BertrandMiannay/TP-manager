@@ -1,0 +1,16 @@
+{% extends "suivi/base.html" %}
+
+{% block title %}Nouvelle séance{% endblock %}
+
+{% block suivi_content %}
+<a href="{% url 'suivi-sessions' %}" class="btn btn-secondary" style="margin-bottom:1.5rem;">← Retour</a>
+<h1>Nouvelle séance</h1>
+<form method="post" class="card" style="max-width:800px;">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% include "suivi/_session_fields.html" %}
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Créer la séance</button>
+    </div>
+</form>
+{% endblock %}

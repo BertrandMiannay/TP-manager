@@ -1,0 +1,28 @@
+{% if exercises %}
+<table>
+    <thead><tr><th>Date</th><th>Exercice</th><th>Compétence</th><th>Résultat</th><th>Commentaire</th>{% if staff_view %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for ex in exercises %}
+        <tr>
+            <td data-label="Date">{{ ex.date|date:"d/m/Y" }}</td>
+            <td data-label="Exercice">{{ ex.name }}</td>
+            <td data-label="Compétence" style="font-size:0.85rem;">{{ ex.skill.name|default:"—" }}</td>
+            <td data-label="Résultat"><span class="badge badge-{{ ex.result }}">{{ ex.get_result_display }}</span></td>
+            <td data-label="Commentaire" style="font-size:0.85rem; white-space:pre-line;">{{ ex.comment }}</td>
+            {% if staff_view %}
+            <td>
+                <form method="post" class="inline-form" onsubmit="return confirm('Supprimer cet exercice ?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="_action" value="delete_exercise">
+                    <input type="hidden" name="exercise_pk" value="{{ ex.pk }}">
+                    <button type="submit" class="link-btn" title="Supprimer">✕</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="muted">Aucun exercice enregistré.</p>
+{% endif %}

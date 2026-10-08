@@ -1,0 +1,215 @@
+{% extends "suivi/base.html" %}
+
+{% block title %}{{ session }}{% endblock %}
+
+{% block suivi_content %}
+<a href="{% url 'suivi-sessions' %}" class="btn btn-secondary" style="margin-bottom:1.5rem;">← Séances</a>
+
+<div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
+    <div>
+        <h1 style="margin-bottom:0.25rem;">Séance du {{ session.date|date:"d/m/Y" }}</h1>
+        <p class="muted" style="margin-bottom:1rem;">
+            {% if session.title %}{{ session.title }}{% endif %}
+            {% if session.location %} · {{ session.location }}{% endif %}
+            {% for c in session.cursus.all %} <span class="badge badge-cursus">{{ c.name }}</span>{% endfor %}
+        </p>
+        {% if session.instructors.all %}
+        <p class="muted" style="margin-bottom:1rem; font-size:0.9rem;">Encadrants :
+            {% for u in session.instructors.all %}{{ u.get_full_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </p>
+        {% endif %}
+    </div>
+    <div style="display:flex; gap:0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('edit-card').style.display = document.getElementById('edit-card').style.display === 'none' ? '' : 'none'">Modifier</button>
+        <form method="post" action="{% url 'suivi-session-delete' session.pk %}" onsubmit="return confirm('Supprimer cette séance et toutes les présences associées ?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Supprimer</button>
+        </form>
+    </div>
+</div>
+
+<form method="post" class="card" id="edit-card" style="display:none;">
+    {% csrf_token %}
+    <input type="hidden" name="_action" value="edit">
+    <h2>Modifier la séance</h2>
+    {% include "suivi/_session_fields.html" %}
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Enregistrer</button></div>
+</form>
+
+{% if session.notes %}
+<div class="card">
+    <h2>Déroulé / remarques <span class="badge badge-staff">équipe encadrante</span></h2>
+    <p style="white-space:pre-line;">{{ session.notes }}</p>
+</div>
+{% endif %}
+
+<div class="stats">
+    <div class="stat"><div class="value">{{ stats.present }}</div><div class="label">Présents</div></div>
+    <div class="stat"><div class="value">{{ stats.absent }}</div><div class="label">Absents</div></div>
+    <div class="stat"><div class="value">{{ stats.excused }}</div><div class="label">Excusés</div></div>
+    <div class="stat"><div class="value">{{ roster_rows|length }}</div><div class="label">Élèves attendus</div></div>
+</div>
+
+{# ---------------- Appel ---------------- #}
+<form method="post" class="card" id="presences">
+    {% csrf_token %}
+    <input type="hidden" name="_action" value="attendance">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+        <h2 style="margin:0;">Appel</h2>
+        <div style="display:flex; gap:0.5rem;">
+            <button type="button" class="btn btn-secondary" onclick="setAll('present')">Tous présents</button>
+            <button type="button" class="btn btn-secondary" onclick="setAll('absent')">Tous absents</button>
+            <button type="submit" class="btn btn-primary">Enregistrer l'appel</button>
+        </div>
+    </div>
+    {% if roster_rows %}
+    <table>
+        <thead><tr><th>Élève</th><th>Présence</th><th>Commentaire</th></tr></thead>
+        <tbody>
+        {% for row in roster_rows %}
+            <tr>
+                <td data-label="Élève"><a href="{% url 'suivi-student-detail' row.member.pk %}" style="color:#1a1a2e;">{{ row.member.last_name }} {{ row.member.first_name }}</a></td>
+                <td data-label="Présence">
+                    <div class="radio-group">
+                    {% for value, label in attendance_choices %}
+                        <label><input type="radio" class="att-radio" name="att_{{ row.member.pk }}" value="{{ value }}" {% if row.attendance.status == value %}checked{% endif %}> {{ label }}</label>
+                    {% endfor %}
+                        <label class="muted"><input type="radio" name="att_{{ row.member.pk }}" value="" {% if not row.attendance %}checked{% endif %}> Non renseigné</label>
+                    </div>
+                </td>
+                <td data-label="Commentaire"><input type="text" name="att_{{ row.member.pk }}_comment" value="{{ row.attendance.comment|default:'' }}" placeholder="Retard, raison de l'absence…" style="font-size:0.85rem; padding:0.3rem;"></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Aucun élève attendu : associez un niveau à la séance, et des formations aux membres (Gestion du club → Membres).</p>
+    {% endif %}
+</form>
+{% if addable_members %}
+<form method="post" class="card" style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+    {% csrf_token %}
+    <input type="hidden" name="_action" value="add_member">
+    <label style="margin:0;">Ajouter un participant hors niveau :</label>
+    <select name="member_id" style="width:auto; flex:1; min-width:200px;">
+        {% for m in addable_members %}<option value="{{ m.pk }}">{{ m.last_name }} {{ m.first_name }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary">Ajouter (présent)</button>
+</form>
+{% endif %}
+
+{# ---------------- Compétences travaillées ---------------- #}
+<form method="post" class="card" id="competences">
+    {% csrf_token %}
+    <input type="hidden" name="_action" value="skills">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+        <h2 style="margin:0;">Compétences travaillées</h2>
+        {% if skill_tree %}<button type="submit" class="btn btn-primary">Enregistrer</button>{% endif %}
+    </div>
+    {% for c in skill_tree %}
+        <details {% if forloop.first %}open{% endif %} style="margin-bottom:0.75rem;">
+            <summary style="font-weight:600; cursor:pointer; color:#1a1a2e;">{{ c.name }}</summary>
+            {% for cat in c.categories %}
+            <div style="padding:0.5rem 0 0 1rem;">
+                <div style="font-size:0.8rem; font-weight:600; text-transform:uppercase; color:#6b7280; margin-bottom:0.25rem;">{{ cat.name }}</div>
+                {% for s in cat.skills %}
+                <label style="display:flex; align-items:center; gap:0.4rem; font-weight:normal; font-size:0.9rem;">
+                    <input type="checkbox" name="skill_ids" value="{{ s.pk }}" {% if s.selected %}checked{% endif %}> {{ s.name }}
+                </label>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </details>
+    {% empty %}
+        <p class="muted">Associez au moins un niveau (cursus) à la séance pour choisir les compétences travaillées.</p>
+    {% endfor %}
+</form>
+
+{# ---------------- Évaluations ---------------- #}
+<form method="post" class="card" id="evaluations">
+    {% csrf_token %}
+    <input type="hidden" name="_action" value="evaluations">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+        <h2 style="margin:0;">Évaluation des élèves présents</h2>
+        {% if eval_rows and session_skills %}<button type="submit" class="btn btn-primary">Enregistrer les évaluations</button>{% endif %}
+    </div>
+    {% if not session_skills %}
+        <p class="muted">Sélectionnez d'abord les compétences travaillées.</p>
+    {% elif not eval_rows %}
+        <p class="muted">Faites l'appel pour évaluer les élèves présents.</p>
+    {% else %}
+        <p class="muted" style="font-size:0.85rem; margin-bottom:0.75rem;">Chaque changement de statut (ou commentaire) est historisé dans la fiche de l'élève à la date de la séance.</p>
+        {% for row in eval_rows %}
+        <details style="margin-bottom:0.5rem; border:1px solid #e5e7eb; border-radius:6px; padding:0.5rem 0.75rem;">
+            <summary style="cursor:pointer; font-weight:500;">{{ row.member.last_name }} {{ row.member.first_name }}</summary>
+            {% if row.skills %}
+            <table style="margin-top:0.5rem; box-shadow:none;">
+                <tbody>
+                {% for item in row.skills %}
+                    <tr>
+                        <td data-label="Compétence" style="font-size:0.9rem;">{{ item.skill.name }} <span class="muted" style="font-size:0.75rem;">{{ item.skill.category.cursus.name }}</span></td>
+                        <td data-label="Statut" style="width:200px;">
+                            <select name="eval_{{ row.member.pk }}_{{ item.skill.pk }}" style="font-size:0.85rem; padding:0.25rem;">
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td data-label="Commentaire"><input type="text" name="eval_{{ row.member.pk }}_{{ item.skill.pk }}_comment" placeholder="Commentaire facultatif" style="font-size:0.85rem; padding:0.25rem;"></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="muted" style="font-size:0.85rem; margin-top:0.5rem;">Aucune des compétences travaillées ne relève de ses formations.</p>
+            {% endif %}
+        </details>
+        {% endfor %}
+    {% endif %}
+</form>
+
+{# ---------------- Notes ---------------- #}
+<div class="card" id="notes">
+    <h2>Notes de séance</h2>
+    {% if roster_rows %}
+    <form method="post" style="margin-bottom:1rem;">
+        {% csrf_token %}
+        <input type="hidden" name="_action" value="note">
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Élève</label>
+                <select name="member_id">
+                    {% for row in roster_rows %}<option value="{{ row.member.pk }}">{{ row.member.last_name }} {{ row.member.first_name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Visibilité</label>
+                <select name="visibility">
+                    {% for value, label in visibility_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-group"><textarea name="content" rows="2" placeholder="Observation, conseil, point à retravailler…" required></textarea></div>
+        <button type="submit" class="btn btn-primary">Ajouter la note</button>
+    </form>
+    {% endif %}
+    {% for note in session_notes %}
+        <div style="border-top:1px solid #eee; padding:0.5rem 0;">
+            <div style="font-size:0.85rem;">
+                <a href="{% url 'suivi-student-detail' note.member.pk %}#notes" style="color:#1a1a2e; font-weight:500;">{{ note.member.first_name }} {{ note.member.last_name }}</a>
+                <span class="badge badge-{{ note.visibility }}">{{ note.get_visibility_display }}</span>
+                <span class="muted">{{ note.author.get_full_name|default:note.author.username|default:"" }}</span>
+            </div>
+            <p style="white-space:pre-line; margin-top:0.25rem;">{{ note.content }}</p>
+        </div>
+    {% empty %}
+        <p class="muted">Aucune note pour cette séance.</p>
+    {% endfor %}
+</div>
+
+<script>
+function setAll(value) {
+    document.querySelectorAll('input.att-radio[value="' + value + '"]').forEach(function (r) { r.checked = true; });
+}
+</script>
+{% endblock %}

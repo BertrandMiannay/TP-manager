@@ -1,0 +1,45 @@
+{% extends "suivi/base.html" %}
+
+{% block title %}Élèves{% endblock %}
+
+{% block suivi_content %}
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+    <h1 style="margin:0;">Élèves{% if season %} — {{ season.label }}{% endif %}</h1>
+    <form method="get">
+        <select name="cursus" onchange="this.form.submit()" style="width:auto;">
+            <option value="">Tous les niveaux</option>
+            {% for c in cursus_list %}<option value="{{ c.pk }}" {% if c.pk == cursus_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+    </form>
+</div>
+
+<input type="text" id="search" placeholder="Rechercher un élève…" style="max-width:400px; margin-bottom:1rem;">
+
+{% if rows %}
+<table id="student-table">
+    <thead>
+        <tr><th>Élève</th><th>Formations</th><th>Présences</th><th>Compétences acquises</th></tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr style="cursor:pointer;" onclick="window.location='{% url 'suivi-student-detail' row.member.pk %}'">
+            <td data-label="Élève"><a href="{% url 'suivi-student-detail' row.member.pk %}" style="color:#1a1a2e; font-weight:500;">{{ row.member.last_name }} {{ row.member.first_name }}</a></td>
+            <td data-label="Formations">{% for c in row.member.formations.all %}<span class="badge badge-cursus">{{ c.name }}</span> {% endfor %}</td>
+            <td data-label="Présences">{{ row.member.present_count }}/{{ row.member.attendance_count }}{% if row.rate is not None %} <span class="muted">({{ row.rate }} %)</span>{% endif %}</td>
+            <td data-label="Compétences acquises">{{ row.member.acquired_count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<script>
+document.getElementById('search').addEventListener('input', function () {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#student-table tbody tr').forEach(function (row) {
+        row.style.display = row.cells[0].textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+});
+</script>
+{% else %}
+<p class="muted">Aucun élève : associez des formations aux membres de la saison (Gestion du club → Membres).</p>
+{% endif %}
+{% endblock %}

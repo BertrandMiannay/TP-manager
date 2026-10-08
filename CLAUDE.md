@@ -24,6 +24,7 @@ python manage.py init_dev_db
 # Create migrations after model changes
 python manage.py makemigrations helloAssoImporter
 python manage.py makemigrations userManagement
+python manage.py makemigrations suivi
 
 # Revert all migrations for an app
 python manage.py migrate helloAssoImporter zero
@@ -52,6 +53,7 @@ These are loaded by `common/api/helloAssoApi.py` via `python-dotenv`.
 
 - **`helloAssoImporter/`** — Core data import app. Models: `MemberShipForm` → `MemberShipFormOrder` → `Member` (cascade) and `EventForm` → `EventFormOrder` → `EventRegistration` (cascade). All registered in Django admin.
 - **`userManagement/`** — Custom user model (`CustomUser` extends `AbstractUser`), group-based role system, invitation-only registration flow. `CustomUser` is registered in Django admin via `CustomUserAdmin`.
+- **`suivi/`** — Suivi des élèves. Models: `TrainingSession` (séance hebdomadaire : date, saison, cursus préparés, compétences travaillées, encadrants), `Attendance` (présent / absent / excusé, unique par séance × membre), `Exercise` (exercice réalisé par un élève, lié optionnellement à une séance et une compétence), `StudentNote` (note avec visibilité `staff` = équipe encadrante uniquement, ou `student` = visible par l'élève). Les élèves sont les `Member` de la saison en cours ayant au moins une formation (`Member.formations`). L'évaluation par séance met à jour `MemberSkill` et historise dans `SkillEvaluation` (date = date de la séance). L'espace élève (`/suivi/mon-suivi/`) retrouve les fiches par email (`Member.email` == `user.email`) et n'affiche que les notes `student`.
 - **`common/api/helloAssoApi.py`** — Shared `HelloAssoApi` class wrapping the `helloasso-python` SDK (OpenAPI/Pydantic). Handles token auth, automatic token refresh on 401, and all API calls to HelloAsso.
 - **`config/`** — Django project settings, root URL conf, ASGI/WSGI.
 - **`tpmanagement/`** — Stub directory, currently unused.
@@ -104,4 +106,5 @@ Membership import also exists (`refresh_membership_forms`, `get_member_registry`
 | `/accounts/` | allauth auth |
 | `/invitations/` | django-invitations |
 | `/inscriptions/` | helloAssoImporter (liste des sorties, refresh, création WIP) |
+| `/suivi/` | suivi (séances, présences, élèves — staff ; `mon-suivi/` — tout utilisateur connecté) |
 | `/users/` | userManagement |

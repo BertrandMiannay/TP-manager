@@ -1,0 +1,32 @@
+{% for cursus in formations %}
+<details class="card" {% if forloop.first %}open{% endif %}>
+    <summary style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
+        <strong style="color:#1a1a2e;">{{ cursus.name }}</strong>
+        <span style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem;">
+            <span class="badge badge-acquired">{{ cursus.counts.acquired }} acquise{{ cursus.counts.acquired|pluralize }}</span>
+            <span class="badge badge-in_progress">{{ cursus.counts.in_progress }} en cours</span>
+            <span class="muted">{{ cursus.counts.worked }}/{{ cursus.counts.total }} travaillée{{ cursus.counts.worked|pluralize }}</span>
+            <span class="progress" style="width:100px;"><div style="width:{{ cursus.counts.acquired_pct }}%;"></div></span>
+        </span>
+    </summary>
+    {% for cat in cursus.categories %}
+    <div style="margin-top:0.75rem;">
+        <div style="font-size:0.8rem; font-weight:600; text-transform:uppercase; color:#6b7280; margin-bottom:0.25rem;">{{ cat.name }}</div>
+        <table style="box-shadow:none;">
+            <tbody>
+            {% for s in cat.skills %}
+                <tr>
+                    <td data-label="Compétence" style="font-size:0.9rem;">{{ s.name }}</td>
+                    <td data-label="Statut" style="width:190px;"><span class="badge badge-{{ s.status }}">{{ s.status_display }}</span></td>
+                    <td data-label="Travaillée" style="width:170px; font-size:0.85rem;" class="muted">{% if s.worked %}{{ s.worked }} séance{{ s.worked|pluralize }}{% else %}pas encore travaillée{% endif %}</td>
+                    <td data-label="Dernière éval." style="font-size:0.8rem;" class="muted">{% if s.last_eval %}{{ s.last_eval.date|date:"d/m/Y" }}{% if s.last_eval.comment %} — {{ s.last_eval.comment }}{% endif %}{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</details>
+{% empty %}
+<p class="muted">Aucune formation associée.</p>
+{% endfor %}

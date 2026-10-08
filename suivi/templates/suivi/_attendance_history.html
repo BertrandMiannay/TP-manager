@@ -1,0 +1,23 @@
+<div class="stats">
+    <div class="stat"><div class="value">{% if stats.rate is not None %}{{ stats.rate }} %{% else %}—{% endif %}</div><div class="label">Assiduité</div></div>
+    <div class="stat"><div class="value">{{ stats.present }}</div><div class="label">Présences</div></div>
+    <div class="stat"><div class="value">{{ stats.absent }}</div><div class="label">Absences</div></div>
+    <div class="stat"><div class="value">{{ stats.excused }}</div><div class="label">Absences excusées</div></div>
+</div>
+{% if attendances %}
+<table>
+    <thead><tr><th>Date</th><th>Séance</th><th>Présence</th><th>Compétences travaillées</th></tr></thead>
+    <tbody>
+    {% for a in attendances %}
+        <tr>
+            <td data-label="Date">{% if staff_view %}<a href="{% url 'suivi-session-detail' a.session.pk %}" style="color:#1a1a2e;">{{ a.session.date|date:"d/m/Y" }}</a>{% else %}{{ a.session.date|date:"d/m/Y" }}{% endif %}</td>
+            <td data-label="Séance">{{ a.session.title|default:"—" }}</td>
+            <td data-label="Présence"><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span>{% if a.comment %} <span class="muted" style="font-size:0.8rem;">{{ a.comment }}</span>{% endif %}</td>
+            <td data-label="Compétences" style="font-size:0.85rem;">{% for s in a.session.skills.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="muted">Aucune présence enregistrée pour la saison.</p>
+{% endif %}

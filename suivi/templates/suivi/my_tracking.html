@@ -1,0 +1,36 @@
+{% extends "suivi/base.html" %}
+
+{% block title %}Mon suivi{% endblock %}
+
+{% block suivi_content %}
+<h1>Mon suivi{% if season %} — {{ season.label }}{% endif %}</h1>
+
+{% for sheet in sheets %}
+    {% with member=sheet.member stats=sheet.stats attendances=sheet.attendances formations=sheet.formations exercises=sheet.exercises %}
+    {% if sheets|length > 1 %}<h2 style="margin:2rem 0 1rem; color:#1a1a2e;">{{ member.first_name }} {{ member.last_name }}</h2>{% endif %}
+
+    <h3 style="margin:1rem 0 0.75rem;">Présences</h3>
+    {% include "suivi/_attendance_history.html" %}
+
+    <h3 style="margin:2rem 0 0.75rem;">Compétences</h3>
+    {% include "suivi/_skills_progress.html" %}
+
+    <h3 style="margin:2rem 0 0.75rem;">Exercices</h3>
+    {% include "suivi/_exercise_list.html" %}
+
+    <h3 style="margin:2rem 0 0.75rem;">Remarques de l'équipe encadrante</h3>
+    {% for note in sheet.notes %}
+    <div class="card" style="padding:0.75rem 1rem; margin-bottom:0.75rem;">
+        <div style="font-size:0.85rem;"><strong>{{ note.date|date:"d/m/Y" }}</strong>
+            {% if note.author %}<span class="muted">— {{ note.author.get_full_name|default:note.author.username }}</span>{% endif %}
+        </div>
+        <p style="white-space:pre-line; margin-top:0.4rem;">{{ note.content }}</p>
+    </div>
+    {% empty %}
+    <p class="muted">Aucune remarque pour le moment.</p>
+    {% endfor %}
+    {% endwith %}
+{% empty %}
+<p class="muted">Aucune fiche de suivi n'est associée à votre compte. La fiche est retrouvée grâce à l'adresse email utilisée lors de votre adhésion ({{ user.email|default:"aucune adresse renseignée" }}).</p>
+{% endfor %}
+{% endblock %}

@@ -72,7 +72,19 @@ class HomeView(LoginRequiredMixin, TemplateView):
                 'description': "Consulter les formulaires d'adhésion et les membres importés depuis HelloAsso.",
                 'url': '/inscriptions/',
                 'visible': True,
-            }
+            },
+            {
+                'title': 'Suivi des élèves',
+                'description': 'Séances hebdomadaires : appel, compétences travaillées, exercices et notes.',
+                'url': '/suivi/',
+                'visible': self.request.user.is_club_staff,
+            },
+            {
+                'title': 'Mon suivi',
+                'description': 'Mes présences, compétences, exercices et remarques des encadrants.',
+                'url': '/suivi/mon-suivi/',
+                'visible': True,
+            },
         ]
         return ctx
 

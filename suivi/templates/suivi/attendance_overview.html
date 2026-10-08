@@ -1,0 +1,67 @@
+{% extends "suivi/base.html" %}
+
+{% block title %}Présences{% endblock %}
+
+{% block suivi_content %}
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+    <h1 style="margin:0;">Présences{% if season %} — {{ season.label }}{% endif %}</h1>
+    <form method="get">
+        <select name="cursus" onchange="this.form.submit()" style="width:auto;">
+            <option value="">Tous les niveaux</option>
+            {% for c in cursus_list %}<option value="{{ c.pk }}" {% if c.pk == cursus_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+    </form>
+</div>
+
+{% if not sessions %}
+<p class="muted">Aucune séance pour la saison en cours.</p>
+{% elif not rows %}
+<p class="muted">Aucun élève inscrit à une formation pour la saison en cours.</p>
+{% else %}
+<style>
+.att-matrix { overflow-x:auto; }
+.att-matrix table { display:table; width:auto; min-width:100%; }
+.att-matrix thead { display:table-header-group; }
+.att-matrix tr { display:table-row; }
+.att-matrix th, .att-matrix td { display:table-cell; padding:0.4rem 0.5rem; text-align:center; white-space:nowrap; font-size:0.85rem; }
+.att-matrix td::before { content:none; }
+.att-matrix th:first-child, .att-matrix td:first-child { text-align:left; position:sticky; left:0; background:white; }
+.cell-present { background:#dcfce7; color:#166534; }
+.cell-absent { background:#fee2e2; color:#991b1b; }
+.cell-excused { background:#fef3c7; color:#92400e; }
+</style>
+<p class="muted" style="font-size:0.85rem; margin-bottom:0.5rem;">P = présent · A = absent · E = excusé · – = non renseigné</p>
+<div class="att-matrix">
+<table>
+    <thead>
+        <tr>
+            <th>Élève</th>
+            {% for s in sessions %}
+            <th><a href="{% url 'suivi-session-detail' s.pk %}" title="{{ s.title }}" style="color:#1a1a2e;">{{ s.date|date:"d/m" }}</a></th>
+            {% endfor %}
+            <th>Présents</th>
+            <th>Taux</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            <td><a href="{% url 'suivi-student-detail' row.member.pk %}" style="color:#1a1a2e;">{{ row.member.last_name }} {{ row.member.first_name }}</a></td>
+            {% for cell in row.cells %}
+                {% if cell %}
+                <td class="cell-{{ cell.status }}" title="{{ cell.get_status_display }}{% if cell.comment %} — {{ cell.comment }}{% endif %}">
+                    {% if cell.status == 'present' %}P{% elif cell.status == 'absent' %}A{% else %}E{% endif %}
+                </td>
+                {% else %}
+                <td class="muted">–</td>
+                {% endif %}
+            {% endfor %}
+            <td>{{ row.stats.present }}/{{ row.stats.total }}</td>
+            <td>{% if row.stats.rate is not None %}{{ row.stats.rate }} %{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

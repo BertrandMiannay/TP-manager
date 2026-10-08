@@ -1,0 +1,52 @@
+{% extends "suivi/base.html" %}
+
+{% block title %}Séances{% endblock %}
+
+{% block suivi_content %}
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+    <h1 style="margin:0;">Séances{% if season %} — {{ season.label }}{% endif %}</h1>
+    <div style="display:flex; gap:0.75rem; align-items:center;">
+        <form method="get">
+            <select name="season" onchange="this.form.submit()" style="width:auto;">
+                {% for s in seasons %}
+                <option value="{{ s.pk }}" {% if season and s.pk == season.pk %}selected{% endif %}>{{ s.label }}{% if s.current %} (en cours){% endif %}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <a href="{% url 'suivi-session-create' %}" class="btn btn-primary">+ Nouvelle séance</a>
+    </div>
+</div>
+
+{% if not season %}
+<p class="muted" style="margin-bottom:1rem;">Aucune saison en cours : les séances créées ne seront rattachées à aucune saison.</p>
+{% endif %}
+
+{% if sessions %}
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Thème</th>
+            <th>Niveaux</th>
+            <th>Présents</th>
+            <th>Absents</th>
+            <th>Compétences</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in sessions %}
+        <tr style="cursor:pointer;" onclick="window.location='{% url 'suivi-session-detail' s.pk %}'">
+            <td data-label="Date"><a href="{% url 'suivi-session-detail' s.pk %}" style="color:#1a1a2e; font-weight:500;">{{ s.date|date:"d/m/Y" }}</a></td>
+            <td data-label="Thème">{{ s.title|default:"—" }}</td>
+            <td data-label="Niveaux">{% for c in s.cursus.all %}<span class="badge badge-cursus">{{ c.name }}</span> {% empty %}—{% endfor %}</td>
+            <td data-label="Présents">{{ s.present_count }}</td>
+            <td data-label="Absents">{{ s.absent_count }}</td>
+            <td data-label="Compétences">{{ s.skill_count }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="muted">Aucune séance pour cette saison.</p>
+{% endif %}
+{% endblock %}
