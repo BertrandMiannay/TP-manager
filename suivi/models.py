@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
 
-from helloAssoImporter.models import Cursus, Member, Season, Skill
+from helloAssoImporter.models import Cursus, Member, MemberSkill, Season, Skill
 
 
 class TrainingSession(models.Model):
@@ -13,8 +13,6 @@ class TrainingSession(models.Model):
     location    = models.CharField(max_length=200, blank=True)
     cursus      = models.ManyToManyField(Cursus, blank=True, related_name='training_sessions',
                                          help_text="Niveaux préparés pendant la séance")
-    skills      = models.ManyToManyField(Skill, blank=True, related_name='training_sessions',
-                                         help_text="Compétences travaillées pendant la séance")
     instructors = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='training_sessions')
     notes       = models.TextField(blank=True, help_text="Déroulé / remarques (visibles par l'équipe encadrante uniquement)")
     created_at  = models.DateTimeField(auto_now_add=True)
@@ -67,6 +65,27 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f"{self.member} — {self.session} : {self.get_status_display()}"
+
+
+class WorkedSkill(models.Model):
+    """Compétence travaillée par un élève lors d'une séance, avec l'évaluation donnée ce jour-là."""
+
+    session = models.ForeignKey(TrainingSession, on_delete=models.CASCADE, related_name='worked_skills')
+    member  = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='worked_skills')
+    skill   = models.ForeignKey(Skill, on_delete=models.CASCADE, related_name='worked_skills')
+    status  = models.CharField(max_length=20, choices=MemberSkill.SkillStatus.choices, blank=True,
+                               help_text="Évaluation lors de la séance (vide = travaillée sans évaluation)")
+    comment = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        verbose_name        = 'Compétence travaillée'
+        verbose_name_plural = 'Compétences travaillées'
+        constraints = [
+            models.UniqueConstraint(fields=['session', 'member', 'skill'], name='unique_worked_skill'),
+        ]
+
+    def __str__(self):
+        return f"{self.member} — {self.skill} ({self.session.date:%d/%m/%Y})"
 
 
 class Exercise(models.Model):

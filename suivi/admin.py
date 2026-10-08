@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Attendance, Exercise, StudentNote, TrainingSession
+from .models import Attendance, Exercise, StudentNote, TrainingSession, WorkedSkill
 
 
 class AttendanceInline(admin.TabularInline):
@@ -13,7 +13,7 @@ class AttendanceInline(admin.TabularInline):
 class TrainingSessionAdmin(admin.ModelAdmin):
     list_display      = ('date', 'title', 'season')
     list_filter       = ('season',)
-    filter_horizontal = ('cursus', 'skills', 'instructors')
+    filter_horizontal = ('cursus', 'instructors')
     inlines           = [AttendanceInline]
 
 
@@ -33,3 +33,9 @@ class ExerciseAdmin(admin.ModelAdmin):
 class StudentNoteAdmin(admin.ModelAdmin):
     list_display = ('date', 'member', 'visibility', 'author')
     list_filter  = ('visibility',)
+
+
+@admin.register(WorkedSkill)
+class WorkedSkillAdmin(admin.ModelAdmin):
+    list_display = ('session', 'member', 'skill', 'status')
+    list_filter  = ('status', 'session__season')

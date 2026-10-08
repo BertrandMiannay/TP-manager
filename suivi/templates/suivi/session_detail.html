@@ -98,75 +98,74 @@
 </form>
 {% endif %}
 
-{# ---------------- Compétences travaillées ---------------- #}
-<form method="post" class="card" id="competences">
-    {% csrf_token %}
-    <input type="hidden" name="_action" value="skills">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-        <h2 style="margin:0;">Compétences travaillées</h2>
-        {% if skill_tree %}<button type="submit" class="btn btn-primary">Enregistrer</button>{% endif %}
-    </div>
-    {% for c in skill_tree %}
-        <details {% if forloop.first %}open{% endif %} style="margin-bottom:0.75rem;">
-            <summary style="font-weight:600; cursor:pointer; color:#1a1a2e;">{{ c.name }}</summary>
-            {% for cat in c.categories %}
-            <div style="padding:0.5rem 0 0 1rem;">
-                <div style="font-size:0.8rem; font-weight:600; text-transform:uppercase; color:#6b7280; margin-bottom:0.25rem;">{{ cat.name }}</div>
-                {% for s in cat.skills %}
-                <label style="display:flex; align-items:center; gap:0.4rem; font-weight:normal; font-size:0.9rem;">
-                    <input type="checkbox" name="skill_ids" value="{{ s.pk }}" {% if s.selected %}checked{% endif %}> {{ s.name }}
-                </label>
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </details>
-    {% empty %}
-        <p class="muted">Associez au moins un niveau (cursus) à la séance pour choisir les compétences travaillées.</p>
-    {% endfor %}
-</form>
-
-{# ---------------- Évaluations ---------------- #}
-<form method="post" class="card" id="evaluations">
-    {% csrf_token %}
-    <input type="hidden" name="_action" value="evaluations">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-        <h2 style="margin:0;">Évaluation des élèves présents</h2>
-        {% if eval_rows and session_skills %}<button type="submit" class="btn btn-primary">Enregistrer les évaluations</button>{% endif %}
-    </div>
-    {% if not session_skills %}
-        <p class="muted">Sélectionnez d'abord les compétences travaillées.</p>
-    {% elif not eval_rows %}
-        <p class="muted">Faites l'appel pour évaluer les élèves présents.</p>
+{# ---------------- Compétences travaillées par élève ---------------- #}
+<div class="card" id="competences">
+    <h2>Compétences travaillées par élève</h2>
+    {% if not skill_rows %}
+        <p class="muted">Faites l'appel : les élèves présents apparaîtront ici.</p>
     {% else %}
-        <p class="muted" style="font-size:0.85rem; margin-bottom:0.75rem;">Chaque changement de statut (ou commentaire) est historisé dans la fiche de l'élève à la date de la séance.</p>
-        {% for row in eval_rows %}
-        <details style="margin-bottom:0.5rem; border:1px solid #e5e7eb; border-radius:6px; padding:0.5rem 0.75rem;">
-            <summary style="cursor:pointer; font-weight:500;">{{ row.member.last_name }} {{ row.member.first_name }}</summary>
-            {% if row.skills %}
-            <table style="margin-top:0.5rem; box-shadow:none;">
-                <tbody>
-                {% for item in row.skills %}
-                    <tr>
-                        <td data-label="Compétence" style="font-size:0.9rem;">{{ item.skill.name }} <span class="muted" style="font-size:0.75rem;">{{ item.skill.category.cursus.name }}</span></td>
-                        <td data-label="Statut" style="width:200px;">
-                            <select name="eval_{{ row.member.pk }}_{{ item.skill.pk }}" style="font-size:0.85rem; padding:0.25rem;">
-                                {% for value, label in status_choices %}
-                                <option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                        </td>
-                        <td data-label="Commentaire"><input type="text" name="eval_{{ row.member.pk }}_{{ item.skill.pk }}_comment" placeholder="Commentaire facultatif" style="font-size:0.85rem; padding:0.25rem;"></td>
-                    </tr>
+        <p class="muted" style="font-size:0.85rem; margin-bottom:0.75rem;">
+            Cochez les compétences travaillées par chaque élève et, si besoin, l'évaluation du jour.
+            Une évaluation met à jour le statut de la compétence de l'élève et est historisée à la date de la séance.
+        </p>
+        {% for row in skill_rows %}
+        <details id="eleve-{{ row.member.pk }}" class="student-skills" style="margin-bottom:0.5rem; border:1px solid #e5e7eb; border-radius:6px; padding:0.5rem 0.75rem;">
+            <summary style="cursor:pointer; display:flex; justify-content:space-between; gap:0.5rem; flex-wrap:wrap;">
+                <span style="font-weight:500;">{{ row.member.last_name }} {{ row.member.first_name }}{% if not row.present %} <span class="badge badge-absent">non présent</span>{% endif %}</span>
+                <span style="font-size:0.85rem;">
+                    {% if row.worked_count %}
+                    <span class="muted">{{ row.worked_count }} compétence{{ row.worked_count|pluralize }} travaillée{{ row.worked_count|pluralize }}</span>
+                    {% if row.acquired_count %}<span class="badge badge-acquired">{{ row.acquired_count }} validée{{ row.acquired_count|pluralize }}</span>{% endif %}
+                    {% else %}<span class="muted">rien de saisi</span>{% endif %}
+                </span>
+            </summary>
+            {% if row.cursus %}
+            <form method="post" style="margin-top:0.5rem;">
+                {% csrf_token %}
+                <input type="hidden" name="_action" value="worked_skills">
+                <input type="hidden" name="member_id" value="{{ row.member.pk }}">
+                <label style="font-weight:normal; font-size:0.85rem; display:flex; align-items:center; gap:0.35rem; margin-bottom:0.5rem;">
+                    <input type="checkbox" class="only-worked"> Afficher uniquement les compétences cochées
+                </label>
+                {% for c in row.cursus %}
+                    {% if row.cursus|length > 1 %}<div style="font-weight:600; color:#1a1a2e; margin-top:0.5rem;">{{ c.name }}</div>{% endif %}
+                    {% for cat in c.categories %}
+                    <div class="skill-cat" style="margin-top:0.5rem;">
+                        <div style="font-size:0.8rem; font-weight:600; text-transform:uppercase; color:#6b7280;">{{ cat.name }}</div>
+                        <table class="ws-table" style="box-shadow:none;">
+                            <tbody>
+                            {% for sk in cat.skills %}
+                            <tr class="ws-row" data-worked="{{ sk.worked|yesno:'1,0' }}">
+                                <td data-label="Travaillée" style="width:2rem;"><input type="checkbox" class="ws-check" name="ws_{{ sk.pk }}" value="1" {% if sk.worked %}checked{% endif %}></td>
+                                <td data-label="Compétence" style="font-size:0.9rem;">
+                                    {{ sk.name }}
+                                    <span class="badge badge-{{ sk.global_status }}" title="Statut actuel" style="margin-left:0.25rem;">{{ sk.global_status_display }}</span>
+                                </td>
+                                <td data-label="Évaluation du jour" style="width:190px;">
+                                    <select name="ws_{{ sk.pk }}_status" class="ws-status" style="font-size:0.85rem; padding:0.25rem;">
+                                        <option value="">— Non évaluée</option>
+                                        {% for value, label in status_choices %}
+                                        <option value="{{ value }}" {% if sk.session_status == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td data-label="Commentaire"><input type="text" name="ws_{{ sk.pk }}_comment" value="{{ sk.comment }}" placeholder="Commentaire" style="font-size:0.85rem; padding:0.25rem;"></td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endfor %}
                 {% endfor %}
-                </tbody>
-            </table>
+                <div class="form-actions"><button type="submit" class="btn btn-primary">Enregistrer pour {{ row.member.first_name }}</button></div>
+            </form>
             {% else %}
-            <p class="muted" style="font-size:0.85rem; margin-top:0.5rem;">Aucune des compétences travaillées ne relève de ses formations.</p>
+            <p class="muted" style="font-size:0.85rem; margin-top:0.5rem;">Aucune formation associée à cet élève.</p>
             {% endif %}
         </details>
         {% endfor %}
     {% endif %}
-</form>
+</div>
 
 {# ---------------- Notes ---------------- #}
 <div class="card" id="notes">
@@ -207,7 +206,30 @@
     {% endfor %}
 </div>
 
+<style>
+.ws-table td { padding:0.3rem 0.5rem; }
+.ws-row[data-worked="1"] td { background:#f0fdf4; }
+.only-worked-on .ws-row:not([data-worked="1"]) { display:none; }
+</style>
 <script>
+document.querySelectorAll('.student-skills').forEach(function (block) {
+    block.addEventListener('change', function (e) {
+        const row = e.target.closest('.ws-row');
+        if (e.target.classList.contains('only-worked')) {
+            block.classList.toggle('only-worked-on', e.target.checked);
+            return;
+        }
+        if (!row) return;
+        const check = row.querySelector('.ws-check');
+        if (e.target.classList.contains('ws-status') && e.target.value) check.checked = true;
+        if (e.target === check && !check.checked) row.querySelector('.ws-status').value = '';
+        row.dataset.worked = check.checked ? '1' : '0';
+    });
+});
+if (location.hash.startsWith('#eleve-')) {
+    const el = document.querySelector(location.hash);
+    if (el) el.open = true;
+}
 function setAll(value) {
     document.querySelectorAll('input.att-radio[value="' + value + '"]').forEach(function (r) { r.checked = true; });
 }

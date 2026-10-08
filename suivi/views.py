@@ -11,7 +11,7 @@ from django.utils import timezone
 from helloAssoImporter.models import Cursus, Member, MemberSkill, Season, Skill, SkillEvaluation
 from userManagement.views import club_staff_required
 from .forms import ExerciseForm, StudentNoteForm, TrainingSessionForm
-from .models import Attendance, Exercise, StudentNote, TrainingSession
+from .models import Attendance, Exercise, StudentNote, TrainingSession, WorkedSkill
 
 logger = logging.getLogger(__name__)
 
@@ -39,23 +39,22 @@ def _attendance_stats(attendances):
     return stats
 
 
-def _skills_progress(member, attended_session_ids=None):
-    """Structure cursus → catégories → compétences, avec statut, nb de séances où la compétence
-    a été travaillée en présence de l'élève et dernière évaluation."""
+def _skills_progress(member):
+    """Structure cursus → catégories → compétences, avec statut, nb de séances où l'élève
+    a travaillé la compétence et dernière évaluation."""
     formations = member.formations.prefetch_related('categories__skills').order_by('name')
     skill_ids = [s.pk for f in formations for c in f.categories.all() for s in c.skills.all()]
     status_map = {
         ms.skill_id: ms.status
         for ms in MemberSkill.objects.filter(member=member, skill_id__in=skill_ids)
     }
-    worked_map = {}
-    if attended_session_ids is not None:
+    worked_map = {
+        row['skill_id']: row['n']
         for row in (
-            TrainingSession.skills.through.objects
-            .filter(trainingsession_id__in=attended_session_ids, skill_id__in=skill_ids)
-            .values('skill_id').annotate(n=Count('trainingsession_id'))
-        ):
-            worked_map[row['skill_id']] = row['n']
+            WorkedSkill.objects.filter(member=member, skill_id__in=skill_ids)
+            .values('skill_id').annotate(n=Count('session_id', distinct=True))
+        )
+    }
     last_eval = {}
     for ev in SkillEvaluation.objects.filter(member=member, skill_id__in=skill_ids).order_by('-date', '-pk'):
         last_eval.setdefault(ev.skill_id, ev)
@@ -87,6 +86,61 @@ def _skills_progress(member, attended_session_ids=None):
     return result
 
 
+def _candidate_skills(session, member):
+    """Compétences proposables pour un élève lors d'une séance : celles de ses formations,
+    restreintes aux niveaux de la séance quand ils recoupent ses formations."""
+    formation_ids = set(member.formations.values_list('pk', flat=True))
+    session_ids = set(session.cursus.values_list('pk', flat=True))
+    cursus_ids = (formation_ids & session_ids) or formation_ids
+    return list(
+        Skill.objects.filter(category__cursus__in=cursus_ids)
+        .select_related('category__cursus')
+        .order_by('category__cursus__name', 'category__order', 'category__pk', 'order', 'pk')
+    )
+
+
+def _skill_tree(member, skills, worked):
+    """Regroupe les compétences par cursus puis catégorie, avec l'état travaillé / évalué
+    pour la séance et le statut global de l'élève."""
+    global_status = {
+        ms.skill_id: ms.status
+        for ms in MemberSkill.objects.filter(member=member, skill__in=skills)
+    }
+    tree = []
+    for skill in skills:
+        cursus, category = skill.category.cursus, skill.category
+        if not tree or tree[-1]['pk'] != cursus.pk:
+            tree.append({'pk': cursus.pk, 'name': cursus.name, 'categories': []})
+        cats = tree[-1]['categories']
+        if not cats or cats[-1]['pk'] != category.pk:
+            cats.append({'pk': category.pk, 'name': category.name, 'skills': []})
+        ws = worked.get(skill.pk)
+        status = global_status.get(skill.pk, MemberSkill.SkillStatus.NOT_ACQUIRED)
+        cats[-1]['skills'].append({
+            'pk': skill.pk,
+            'name': skill.name,
+            'worked': ws is not None,
+            'session_status': ws.status if ws else '',
+            'comment': ws.comment if ws else '',
+            'global_status': status,
+            'global_status_display': MemberSkill.SkillStatus(status).label,
+        })
+    return tree
+
+
+def _attach_worked_skills(member, attendances):
+    """Ajoute à chaque présence la liste des compétences travaillées par l'élève ce jour-là."""
+    by_session = {}
+    for ws in (
+        WorkedSkill.objects.filter(member=member, session_id__in=[a.session_id for a in attendances])
+        .select_related('skill').order_by('skill__category__order', 'skill__order')
+    ):
+        by_session.setdefault(ws.session_id, []).append(ws)
+    for a in attendances:
+        a.worked = by_session.get(a.session_id, [])
+    return attendances
+
+
 # ---------------------------------------------------------------------------
 # Séances
 # ---------------------------------------------------------------------------
@@ -102,7 +156,7 @@ def session_list(request):
     sessions = sessions.prefetch_related('cursus', 'instructors').annotate(
         present_count=Count('attendances', filter=Q(attendances__status=Attendance.Status.PRESENT), distinct=True),
         absent_count=Count('attendances', filter=~Q(attendances__status=Attendance.Status.PRESENT), distinct=True),
-        skill_count=Count('skills', distinct=True),
+        skill_count=Count('worked_skills__skill', distinct=True),
     )
     return render(request, 'suivi/session_list.html', {
         'sessions': sessions,
@@ -176,34 +230,37 @@ def session_detail(request, pk):
             )
             return redirect(reverse('suivi-session-detail', args=[pk]) + '#presences')
 
-        elif action == 'skills':
-            allowed = Skill.objects.filter(category__cursus__in=session.cursus.all())
-            ids = request.POST.getlist('skill_ids')
-            session.skills.set(allowed.filter(pk__in=ids))
-            messages.success(request, "Compétences travaillées enregistrées.")
-            return redirect(reverse('suivi-session-detail', args=[pk]) + '#competences')
-
-        elif action == 'evaluations':
+        elif action == 'worked_skills':
+            member = get_object_or_404(Member, pk=request.POST.get('member_id'))
             valid = set(MemberSkill.SkillStatus.values)
-            present = Member.objects.filter(
-                attendances__session=session, attendances__status=Attendance.Status.PRESENT,
-            )
-            skills = list(session.skills.all())
-            changed = 0
+            candidates = _candidate_skills(session, member)
+            existing = {ws.skill_id: ws for ws in WorkedSkill.objects.filter(session=session, member=member)}
+            current = {
+                ms.skill_id: ms.status
+                for ms in MemberSkill.objects.filter(member=member, skill__in=candidates)
+            }
+            evaluated = 0
             with transaction.atomic():
-                for member in present:
-                    current = {
-                        ms.skill_id: ms.status
-                        for ms in MemberSkill.objects.filter(member=member, skill__in=skills)
-                    }
-                    for skill in skills:
-                        status = request.POST.get(f'eval_{member.pk}_{skill.pk}', '')
-                        comment = request.POST.get(f'eval_{member.pk}_{skill.pk}_comment', '').strip()
-                        if status not in valid:
-                            continue
-                        old = current.get(skill.pk, MemberSkill.SkillStatus.NOT_ACQUIRED)
-                        if status == old and not comment:
-                            continue
+                for skill in candidates:
+                    prefix = f'ws_{skill.pk}'
+                    status = request.POST.get(f'{prefix}_status', '')
+                    if status not in valid:
+                        status = ''
+                    comment = request.POST.get(f'{prefix}_comment', '').strip()[:255]
+                    worked = bool(request.POST.get(prefix)) or bool(status)
+                    if not worked:
+                        if skill.pk in existing:
+                            existing[skill.pk].delete()
+                        continue
+                    ws = existing.get(skill.pk)
+                    if ws and ws.status == status and ws.comment == comment:
+                        continue
+                    WorkedSkill.objects.update_or_create(
+                        session=session, member=member, skill=skill,
+                        defaults={'status': status, 'comment': comment},
+                    )
+                    old = current.get(skill.pk, MemberSkill.SkillStatus.NOT_ACQUIRED)
+                    if status and (status != old or comment):
                         MemberSkill.objects.update_or_create(
                             member=member, skill=skill, defaults={'status': status},
                         )
@@ -211,9 +268,13 @@ def session_detail(request, pk):
                             member=member, skill=skill, date=session.date, status=status,
                             comment=comment or f"Séance du {session.date:%d/%m/%Y}",
                         )
-                        changed += 1
-            messages.success(request, f"{changed} évaluation(s) enregistrée(s).")
-            return redirect(reverse('suivi-session-detail', args=[pk]) + '#evaluations')
+                        evaluated += 1
+            messages.success(
+                request,
+                f"Compétences de {member.first_name} {member.last_name} enregistrées"
+                + (f" ({evaluated} évaluation(s))." if evaluated else "."),
+            )
+            return redirect(reverse('suivi-session-detail', args=[pk]) + f'#eleve-{member.pk}')
 
         elif action == 'note':
             member = get_object_or_404(Member, pk=request.POST.get('member_id'))
@@ -234,40 +295,22 @@ def session_detail(request, pk):
     roster_rows = [{'member': m, 'attendance': attendance_map.get(m.pk)} for m in roster]
     stats = _attendance_stats(attendance_map.values())
 
-    session_cursus = session.cursus.prefetch_related('categories__skills').order_by('name')
-    selected_skill_ids = set(session.skills.values_list('pk', flat=True))
-    skill_tree = [
-        {
-            'name': c.name,
-            'categories': [
-                {
-                    'name': cat.name,
-                    'skills': [{'pk': s.pk, 'name': s.name, 'selected': s.pk in selected_skill_ids} for s in cat.skills.all()],
-                }
-                for cat in c.categories.all()
-            ],
-        }
-        for c in session_cursus
-    ]
-
-    session_skills = list(session.skills.select_related('category__cursus').order_by('category__cursus__name', 'category__order', 'order'))
-    present_members = [r['member'] for r in roster_rows if r['attendance'] and r['attendance'].status == Attendance.Status.PRESENT]
-    status_lookup = {
-        (ms.member_id, ms.skill_id): ms.status
-        for ms in MemberSkill.objects.filter(member__in=present_members, skill__in=session_skills)
-    }
-    eval_rows = []
-    for m in present_members:
-        enrolled = set(m.formations.values_list('pk', flat=True))
-        eval_rows.append({
+    worked_by_member = {}
+    for ws in session.worked_skills.all():
+        worked_by_member.setdefault(ws.member_id, {})[ws.skill_id] = ws
+    skill_rows = []
+    for r in roster_rows:
+        m = r['member']
+        worked = worked_by_member.get(m.pk, {})
+        is_present = r['attendance'] and r['attendance'].status == Attendance.Status.PRESENT
+        if not is_present and not worked:
+            continue
+        skill_rows.append({
             'member': m,
-            'skills': [
-                {
-                    'skill': s,
-                    'status': status_lookup.get((m.pk, s.pk), MemberSkill.SkillStatus.NOT_ACQUIRED),
-                }
-                for s in session_skills if s.category.cursus_id in enrolled
-            ],
+            'present': is_present,
+            'worked_count': len(worked),
+            'acquired_count': sum(1 for ws in worked.values() if ws.status == MemberSkill.SkillStatus.ACQUIRED),
+            'cursus': _skill_tree(m, _candidate_skills(session, m), worked),
         })
 
     roster_ids = [m.pk for m in roster]
@@ -281,9 +324,7 @@ def session_detail(request, pk):
         'roster_rows': roster_rows,
         'stats': stats,
         'attendance_choices': Attendance.Status.choices,
-        'skill_tree': skill_tree,
-        'session_skills': session_skills,
-        'eval_rows': eval_rows,
+        'skill_rows': skill_rows,
         'status_choices': MemberSkill.SkillStatus.choices,
         'visibility_choices': StudentNote.Visibility.choices,
         'session_notes': session.student_notes.select_related('member', 'author'),
@@ -417,11 +458,10 @@ def student_detail(request, pk):
             return redirect(reverse('suivi-student-detail', args=[pk]) + '#notes')
 
     season = _current_season()
-    attendances = member.attendances.select_related('session').prefetch_related('session__skills')
+    attendances = member.attendances.select_related('session')
     if season:
         attendances = attendances.filter(session__season=season)
-    attendances = list(attendances.order_by('-session__date', '-session__pk'))
-    attended_ids = [a.session_id for a in attendances if a.status == Attendance.Status.PRESENT]
+    attendances = _attach_worked_skills(member, list(attendances.order_by('-session__date', '-session__pk')))
 
     is_current_member = member.membershipformorder_set.filter(form__season__current=True).exists()
 
@@ -429,7 +469,7 @@ def student_detail(request, pk):
         'member': member,
         'attendances': attendances,
         'stats': _attendance_stats(attendances),
-        'formations': _skills_progress(member, attended_ids),
+        'formations': _skills_progress(member),
         'exercises': member.exercises.select_related('skill', 'session', 'author'),
         'notes': member.student_notes.select_related('session', 'author'),
         'exercise_form': exercise_form,
@@ -456,13 +496,12 @@ def my_tracking(request):
         attendances = member.attendances.select_related('session')
         if season:
             attendances = attendances.filter(session__season=season)
-        attendances = list(attendances.order_by('-session__date'))
-        attended_ids = [a.session_id for a in attendances if a.status == Attendance.Status.PRESENT]
+        attendances = _attach_worked_skills(member, list(attendances.order_by('-session__date')))
         sheets.append({
             'member': member,
             'attendances': attendances,
             'stats': _attendance_stats(attendances),
-            'formations': _skills_progress(member, attended_ids),
+            'formations': _skills_progress(member),
             'exercises': member.exercises.select_related('skill', 'session'),
             'notes': member.student_notes.filter(visibility=StudentNote.Visibility.STUDENT).select_related('session', 'author'),
         })

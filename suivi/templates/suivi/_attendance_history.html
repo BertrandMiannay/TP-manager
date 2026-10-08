@@ -13,7 +13,7 @@
             <td data-label="Date">{% if staff_view %}<a href="{% url 'suivi-session-detail' a.session.pk %}" style="color:#1a1a2e;">{{ a.session.date|date:"d/m/Y" }}</a>{% else %}{{ a.session.date|date:"d/m/Y" }}{% endif %}</td>
             <td data-label="Séance">{{ a.session.title|default:"—" }}</td>
             <td data-label="Présence"><span class="badge badge-{{ a.status }}">{{ a.get_status_display }}</span>{% if a.comment %} <span class="muted" style="font-size:0.8rem;">{{ a.comment }}</span>{% endif %}</td>
-            <td data-label="Compétences" style="font-size:0.85rem;">{% for s in a.session.skills.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+            <td data-label="Compétences" style="font-size:0.85rem;">{% for ws in a.worked %}{{ ws.skill.name }}{% if ws.status %} <span class="badge badge-{{ ws.status }}">{{ ws.get_status_display }}</span>{% endif %}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
         </tr>
     {% endfor %}
     </tbody>

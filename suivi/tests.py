@@ -9,7 +9,7 @@ from django.utils import timezone
 from helloAssoImporter.models import (
     Cursus, CursusCategory, Member, MemberShipForm, MemberShipFormOrder, MemberSkill, Season, Skill, SkillEvaluation,
 )
-from .models import Attendance, Exercise, StudentNote, TrainingSession
+from .models import Attendance, Exercise, StudentNote, TrainingSession, WorkedSkill
 
 
 class SuiviTestCase(TestCase):
@@ -67,7 +67,7 @@ class SuiviTestCase(TestCase):
         self.assertContains(resp, 'Alice')
         self.assertNotContains(resp, 'name="att_%d"' % self.carol.pk)
 
-    def test_attendance_skills_and_evaluations(self):
+    def test_attendance_and_worked_skills_per_student(self):
         session = self._create_session()
         url = reverse('suivi-session-detail', args=[session.pk])
         self.client.post(url, {
@@ -82,21 +82,32 @@ class SuiviTestCase(TestCase):
         self.client.post(url, {'_action': 'add_member', 'member_id': self.carol.pk})
         self.assertIn(self.carol, session.roster())
 
-        self.client.post(url, {'_action': 'skills', 'skill_ids': [self.skill_a.pk, self.skill_b.pk]})
-        self.assertEqual(set(session.skills.all()), {self.skill_a, self.skill_b})
-
-        resp = self.client.post(url, {
-            '_action': 'evaluations',
-            f'eval_{self.alice.pk}_{self.skill_a.pk}': 'acquired',
-            f'eval_{self.alice.pk}_{self.skill_b.pk}': 'not_acquired',
-            f'eval_{self.bob.pk}_{self.skill_a.pk}': 'acquired',  # absent : ignoré
+        # Alice : A travaillée et validée, B travaillée sans évaluation
+        self.client.post(url, {
+            '_action': 'worked_skills', 'member_id': self.alice.pk,
+            f'ws_{self.skill_a.pk}_status': 'acquired',
+            f'ws_{self.skill_b.pk}': '1', f'ws_{self.skill_b.pk}_status': '',
         })
+        worked = {ws.skill: ws.status for ws in WorkedSkill.objects.filter(session=session, member=self.alice)}
+        self.assertEqual(worked, {self.skill_a: 'acquired', self.skill_b: ''})
         self.assertEqual(MemberSkill.objects.get(member=self.alice, skill=self.skill_a).status, 'acquired')
-        self.assertFalse(MemberSkill.objects.filter(member=self.bob).exists())
-        self.assertEqual(SkillEvaluation.objects.filter(member=self.alice).count(), 1)
+        self.assertFalse(MemberSkill.objects.filter(member=self.alice, skill=self.skill_b).exists())
         self.assertEqual(SkillEvaluation.objects.get().date, session.date)
 
-        self.assertEqual(self.client.get(url).status_code, 200)
+        # Les compétences sont propres à chaque élève
+        self.assertFalse(WorkedSkill.objects.filter(member=self.bob).exists())
+
+        # Ré-enregistrer à l'identique ne recrée pas d'évaluation ; décocher supprime
+        self.client.post(url, {
+            '_action': 'worked_skills', 'member_id': self.alice.pk,
+            f'ws_{self.skill_a.pk}': '1', f'ws_{self.skill_a.pk}_status': 'acquired',
+        })
+        self.assertEqual(SkillEvaluation.objects.count(), 1)
+        self.assertEqual(list(WorkedSkill.objects.values_list('skill', flat=True)), [self.skill_a.pk])
+
+        resp = self.client.get(url)
+        self.assertContains(resp, f'id="eleve-{self.alice.pk}"')
+        self.assertNotContains(resp, f'id="eleve-{self.bob.pk}"')  # excusé, rien de saisi
 
         # Désélectionner un statut supprime la présence
         self.client.post(url, {'_action': 'attendance', f'att_{self.alice.pk}': 'present'})
@@ -105,7 +116,7 @@ class SuiviTestCase(TestCase):
     def test_overview_and_student_pages(self):
         session = self._create_session()
         Attendance.objects.create(session=session, member=self.alice, status='present')
-        session.skills.add(self.skill_a)
+        WorkedSkill.objects.create(session=session, member=self.alice, skill=self.skill_a, status='in_progress')
 
         resp = self.client.get(reverse('suivi-attendance'))
         self.assertContains(resp, 'Martin Alice')
@@ -116,6 +127,7 @@ class SuiviTestCase(TestCase):
 
         resp = self.client.get(reverse('suivi-student-detail', args=[self.alice.pk]))
         self.assertContains(resp, '1 séance')
+        self.assertContains(resp, 'Vidage de masque <span class="badge badge-in_progress">')
 
     def test_exercises_and_notes(self):
         url = reverse('suivi-student-detail', args=[self.alice.pk])
