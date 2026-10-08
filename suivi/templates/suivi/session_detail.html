@@ -149,7 +149,7 @@
                                         {% endfor %}
                                     </select>
                                 </td>
-                                <td data-label="Commentaire"><input type="text" name="ws_{{ sk.pk }}_comment" value="{{ sk.comment }}" placeholder="Commentaire" style="font-size:0.85rem; padding:0.25rem;"></td>
+                                <td data-label="Commentaire"><input type="text" name="ws_{{ sk.pk }}_comment" value="{{ sk.comment }}" placeholder="Commentaire" style="font-size:0.85rem; padding:0.25rem;">{% if sk.author %}<div class="muted" style="font-size:0.75rem; margin-top:0.15rem;">saisi par {{ sk.author.get_full_name|default:sk.author.username }}</div>{% endif %}</td>
                             </tr>
                             {% endfor %}
                             </tbody>

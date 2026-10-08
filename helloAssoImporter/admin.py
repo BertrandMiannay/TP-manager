@@ -136,4 +136,7 @@ class SkillAdmin(admin.ModelAdmin):
 
 
 admin.site.register(MemberSkill)
-admin.site.register(SkillEvaluation)
+@admin.register(SkillEvaluation)
+class SkillEvaluationAdmin(admin.ModelAdmin):
+    list_display = ('date', 'member', 'skill', 'status', 'author')
+    list_filter  = ('status', 'author')

@@ -56,7 +56,7 @@ def _skills_progress(member):
         )
     }
     last_eval = {}
-    for ev in SkillEvaluation.objects.filter(member=member, skill_id__in=skill_ids).order_by('-date', '-pk'):
+    for ev in SkillEvaluation.objects.filter(member=member, skill_id__in=skill_ids).select_related('author').order_by('-date', '-pk'):
         last_eval.setdefault(ev.skill_id, ev)
 
     result = []
@@ -122,6 +122,7 @@ def _skill_tree(member, skills, worked):
             'worked': ws is not None,
             'session_status': ws.status if ws else '',
             'comment': ws.comment if ws else '',
+            'author': ws.author if ws else None,
             'global_status': status,
             'global_status_display': MemberSkill.SkillStatus(status).label,
         })
@@ -257,7 +258,7 @@ def session_detail(request, pk):
                         continue
                     WorkedSkill.objects.update_or_create(
                         session=session, member=member, skill=skill,
-                        defaults={'status': status, 'comment': comment},
+                        defaults={'status': status, 'comment': comment, 'author': request.user},
                     )
                     old = current.get(skill.pk, MemberSkill.SkillStatus.NOT_ACQUIRED)
                     if status and (status != old or comment):
@@ -267,6 +268,7 @@ def session_detail(request, pk):
                         SkillEvaluation.objects.create(
                             member=member, skill=skill, date=session.date, status=status,
                             comment=comment or f"Séance du {session.date:%d/%m/%Y}",
+                            author=request.user,
                         )
                         evaluated += 1
             messages.success(
@@ -296,7 +298,7 @@ def session_detail(request, pk):
     stats = _attendance_stats(attendance_map.values())
 
     worked_by_member = {}
-    for ws in session.worked_skills.all():
+    for ws in session.worked_skills.select_related('author'):
         worked_by_member.setdefault(ws.member_id, {})[ws.skill_id] = ws
     skill_rows = []
     for r in roster_rows:

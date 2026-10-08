@@ -93,6 +93,9 @@ class SuiviTestCase(TestCase):
         self.assertEqual(MemberSkill.objects.get(member=self.alice, skill=self.skill_a).status, 'acquired')
         self.assertFalse(MemberSkill.objects.filter(member=self.alice, skill=self.skill_b).exists())
         self.assertEqual(SkillEvaluation.objects.get().date, session.date)
+        self.assertEqual(SkillEvaluation.objects.get().author, self.instructor)
+        self.assertEqual(WorkedSkill.objects.get(member=self.alice, skill=self.skill_b).author, self.instructor)
+        self.assertContains(self.client.get(url), 'saisi par moniteur')
 
         # Les compétences sont propres à chaque élève
         self.assertFalse(WorkedSkill.objects.filter(member=self.bob).exists())
@@ -175,3 +178,20 @@ class SuiviTestCase(TestCase):
         self.client.post(reverse('suivi-session-delete', args=[session.pk]))
         self.assertFalse(TrainingSession.objects.exists())
         self.assertFalse(Attendance.objects.exists())
+
+    def test_adherent_page_traces_status_changes_with_author(self):
+        url = reverse('adherent-formation-save', args=[self.alice.pk, self.cursus.pk])
+        # Changement de statut sans commentaire : historisé avec l'auteur
+        self.client.post(url, {f'skill_{self.skill_a.pk}_status': 'in_progress'})
+        ev = SkillEvaluation.objects.get()
+        self.assertEqual((ev.skill, ev.status, ev.author), (self.skill_a, 'in_progress', self.instructor))
+        # Ré-enregistrer sans changement ni commentaire : pas de nouvelle entrée
+        self.client.post(url, {f'skill_{self.skill_a.pk}_status': 'in_progress'})
+        self.assertEqual(SkillEvaluation.objects.count(), 1)
+
+        resp = self.client.get(reverse('adherent-detail', args=[self.alice.pk]))
+        self.assertContains(resp, 'par moniteur')
+        resp = self.client.get(reverse('suivi-student-detail', args=[self.alice.pk]))
+        self.assertContains(resp, ' · moniteur')
+        resp = self.client.get(reverse('adherent-formation-export', args=[self.alice.pk, self.cursus.pk]))
+        self.assertEqual(resp['Content-Type'], 'application/pdf')

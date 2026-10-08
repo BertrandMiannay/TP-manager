@@ -19,7 +19,7 @@
                     <td data-label="Compétence" style="font-size:0.9rem;">{{ s.name }}</td>
                     <td data-label="Statut" style="width:190px;"><span class="badge badge-{{ s.status }}">{{ s.status_display }}</span></td>
                     <td data-label="Travaillée" style="width:170px; font-size:0.85rem;" class="muted">{% if s.worked %}{{ s.worked }} séance{{ s.worked|pluralize }}{% else %}pas encore travaillée{% endif %}</td>
-                    <td data-label="Dernière éval." style="font-size:0.8rem;" class="muted">{% if s.last_eval %}{{ s.last_eval.date|date:"d/m/Y" }}{% if s.last_eval.comment %} — {{ s.last_eval.comment }}{% endif %}{% endif %}</td>
+                    <td data-label="Dernière éval." style="font-size:0.8rem;" class="muted">{% if s.last_eval %}{{ s.last_eval.date|date:"d/m/Y" }}{% if s.last_eval.author %} · {{ s.last_eval.author.get_full_name|default:s.last_eval.author.username }}{% endif %}{% if s.last_eval.comment %} — {{ s.last_eval.comment }}{% endif %}{% endif %}</td>
                 </tr>
             {% endfor %}
             </tbody>

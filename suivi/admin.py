@@ -37,5 +37,5 @@ class StudentNoteAdmin(admin.ModelAdmin):
 
 @admin.register(WorkedSkill)
 class WorkedSkillAdmin(admin.ModelAdmin):
-    list_display = ('session', 'member', 'skill', 'status')
+    list_display = ('session', 'member', 'skill', 'status', 'author')
     list_filter  = ('status', 'session__season')

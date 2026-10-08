@@ -148,6 +148,7 @@
                                             {% else %}<span style="color:#9ca3af;">— Non acquis</span>{% endif %}
                                         </span>
                                         {% if ev.comment %}<span style="color:#374151;">{{ ev.comment }}</span>{% endif %}
+                                        {% if ev.author %}<span style="white-space:nowrap; color:#9ca3af;">par {{ ev.author }}</span>{% endif %}
                                         <button type="submit" name="_delete_ev" value="{{ ev.pk }}"
                                             formaction="{% url 'adherent-evaluation-delete' member.pk ev.pk %}"
                                             onclick="event.stopPropagation(); return confirm('Supprimer ce commentaire ?');"

@@ -623,9 +623,10 @@ def adherent_detail(request, pk):
         for ms in MemberSkill.objects.filter(member=member, skill_id__in=skill_ids)
     }
     evaluations_map = {}
-    for ev in SkillEvaluation.objects.filter(member=member, skill_id__in=skill_ids).order_by('-date', '-pk'):
+    for ev in SkillEvaluation.objects.filter(member=member, skill_id__in=skill_ids).select_related('author').order_by('-date', '-pk'):
         evaluations_map.setdefault(ev.skill_id, []).append({
             'pk': ev.pk,
+            'author': (ev.author.get_full_name() or ev.author.username) if ev.author else '',
             'date': ev.date,
             'status': ev.status,
             'status_display': ev.get_status_display(),
@@ -668,6 +669,10 @@ def adherent_formation_save(request, pk, cursus_pk):
     valid_statuses = set(dict(MemberSkill.SkillStatus.choices))
     skills = Skill.objects.filter(category__cursus=cursus)
     today = tz.localdate()
+    current = {
+        ms.skill_id: ms.status
+        for ms in MemberSkill.objects.filter(member=member, skill__in=skills)
+    }
     for skill in skills:
         status = request.POST.get(f'skill_{skill.pk}_status', MemberSkill.SkillStatus.NOT_ACQUIRED)
         if status not in valid_statuses:
@@ -677,10 +682,11 @@ def adherent_formation_save(request, pk, cursus_pk):
             member=member, skill=skill,
             defaults={'status': status},
         )
-        if comment:
+        if comment or status != current.get(skill.pk, MemberSkill.SkillStatus.NOT_ACQUIRED):
             SkillEvaluation.objects.create(
                 member=member, skill=skill,
                 date=today, status=status, comment=comment,
+                author=request.user,
             )
     return redirect(reverse('adherent-detail', args=[pk]) + '?tab=formation')
 
@@ -690,6 +696,7 @@ def adherent_formation_export(request, pk, cursus_pk):
     import io
     from django.http import HttpResponse
     from django.utils.formats import date_format
+    from xml.sax.saxutils import escape
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -712,7 +719,7 @@ def adherent_formation_export(request, pk, cursus_pk):
         for ms in MemberSkill.objects.filter(member=member, skill__category__cursus=cursus)
     }
     evaluations_by_skill = {}
-    for ev in SkillEvaluation.objects.filter(member=member, skill__category__cursus=cursus).order_by('-date'):
+    for ev in SkillEvaluation.objects.filter(member=member, skill__category__cursus=cursus).select_related('author').order_by('-date'):
         evaluations_by_skill.setdefault(ev.skill_id, []).append(ev)
 
     STATUS_LABELS = {
@@ -755,7 +762,10 @@ def adherent_formation_export(request, pk, cursus_pk):
             comment_lines = []
             for ev in evs:
                 date_str = date_format(ev.date, 'd/m/Y')
-                comment_lines.append(f"<font color='#9ca3af'>{date_str}</font> {ev.comment}" if ev.comment else f"<font color='#9ca3af'>{date_str}</font>")
+                if ev.author:
+                    date_str += f" · {escape(ev.author.get_full_name() or ev.author.username)}"
+                line = f"<font color='#9ca3af'>{date_str}</font>"
+                comment_lines.append(f"{line} {escape(ev.comment)}" if ev.comment else line)
             comment_para = Paragraph('<br/>'.join(comment_lines), small_grey) if comment_lines else ''
 
             table_data.append([

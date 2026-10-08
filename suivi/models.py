@@ -76,6 +76,8 @@ class WorkedSkill(models.Model):
     status  = models.CharField(max_length=20, choices=MemberSkill.SkillStatus.choices, blank=True,
                                help_text="Évaluation lors de la séance (vide = travaillée sans évaluation)")
     comment = models.CharField(max_length=255, blank=True)
+    author  = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name='+', verbose_name='Saisi par')
 
     class Meta:
         verbose_name        = 'Compétence travaillée'

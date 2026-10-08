@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -208,6 +209,8 @@ class SkillEvaluation(models.Model):
     date    = models.DateField()
     status  = models.CharField(max_length=20, choices=MemberSkill.SkillStatus.choices)
     comment = models.TextField(blank=True)
+    author  = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name='+', verbose_name='Évaluateur')
 
     class Meta:
         verbose_name        = 'Évaluation'
